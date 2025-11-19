@@ -1,160 +1,99 @@
 <!doctype html>
-<html lang="en">
+<html>
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Simple Gist Chat</title>
+<meta charset="utf-8">
+<title>Encrypted Token Gist Chat</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial; margin:0; background:#f7f7f8; color:#111; }
-  .wrap { max-width:720px; margin:20px auto; padding:16px; background:#fff; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.06); }
-  header { display:flex; gap:10px; align-items:center; margin-bottom:12px; }
-  header h1 { font-size:18px; margin:0; color:#075e54; }
-  #chatBox { white-space:pre-wrap; background:#e5ddd5; padding:12px; border-radius:8px; min-height:220px; overflow:auto; font-family: Menlo, monospace; }
-  .controls { display:flex; gap:8px; margin-top:12px; }
-  textarea { width:100%; padding:10px; border-radius:8px; border:1px solid #ddd; font-size:15px; box-sizing:border-box; min-height:80px; resize:vertical; }
-  button { padding:10px 14px; border-radius:8px; border:0; cursor:pointer; font-weight:600; background:#25d366; color:white; }
-  button.danger { background:#f44336; }
+body { font-family: Arial; background:#f7f7f8; }
+#chat { white-space: pre-wrap; background:#eee; padding:10px; border-radius:8px; min-height:200px; }
+textarea { width:100%; height:80px; }
+button { padding:8px 14px; margin-top:6px; }
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <header><h1>Gist Chat</h1></header>
-    <div id="chatBox">Loading chat…</div>
-    <div class="controls">
-      <textarea id="messageInput" placeholder="Type your message here…"></textarea>
-      <button id="btnSend">Send</button>
-      <button id="btnClear" class="danger">Delete chat</button>
-    </div>
-  </div>
+
+<h2>Encrypted Token Chat</h2>
+<div id="chat">Loading…</div>
+<textarea id="msg"></textarea>
+<button id="send">Send</button>
 
 <script>
-(async () => {
-  // CONFIG
-  const GIST_ID = "bacb0944d51800b24bc9b3e54bfb4216";
-  const FILE_NAME = "gistfile1.txt";
-  const TOKEN = "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";
+// =========================
+// XOR + Base64 Decryption
+// =========================
 
-  // UI elements
-  const chatBox = document.getElementById("chatBox");
-  const messageInput = document.getElementById("messageInput");
-  const btnSend = document.getElementById("btnSend");
-  const btnClear = document.getElementById("btnClear");
-
-  let username = sessionStorage.getItem("gistChatName") || "";
-
-  // Assign A/B based on IP
-  async function assignUserByIP() {
-    try {
-      const res = await fetch('https://api.ipify.org?format=json');
-      const data = await res.json();
-      const ip = data.ip;
-      const lastDigit = parseInt(ip.replace(/\D/g,'').slice(-1));
-      username = (lastDigit % 2 === 0) ? "A" : "B";
-    } catch(err) {
-      username = "A"; // fallback
+function xorDecrypt(base64, password) {
+    const data = atob(base64);
+    let out = "";
+    for (let i = 0; i < data.length; i++) {
+        out += String.fromCharCode(data.charCodeAt(i) ^ password.charCodeAt(i % password.length));
     }
-    sessionStorage.setItem("gistChatName", username);
-  }
+    return out;
+}
 
-  await assignUserByIP();
+// =========================
+// ENCRYPTED TOKEN
+// =========================
 
-  // Show status messages
-  function setStatus(msg) {
-    // optional: could show in a small element
-    console.log(msg);
-  }
+const encryptedToken = "EQcNEBQTFxUNFQ8VHRQHEQUZAwIVBwYSGRIrEB0fCgYcHkM=";
+const password = "mrx";       // your password
+const TOKEN = xorDecrypt(encryptedToken, password); // decrypted token
 
-  // Fetch Gist content
-  async function fetchGistContent() {
-    setStatus("Fetching chat…");
-    try {
-      const r = await fetch(`https://api.github.com/gists/${GIST_ID}?t=${Date.now()}`, {
+console.log("Decrypted token used:", TOKEN);  // you can remove this line
+
+// =========================
+// GIST CONFIG
+// =========================
+
+const GIST_ID = "bacb0944d51800b24bc9b3e54bfb4216";
+const FILE_NAME = "gistfile1.txt";
+
+// =========================
+// LOAD CHAT
+// =========================
+
+async function loadChat() {
+    const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
         headers: {
-          "Accept": "application/vnd.github+json",
-          "Authorization": "token " + TOKEN
+            "Authorization": "token " + TOKEN
         }
-      });
-      if(!r.ok) throw new Error("HTTP " + r.status);
-      const data = await r.json();
-      if(!data.files || !data.files[FILE_NAME]) {
-        chatBox.textContent = "(file not found in gist)";
-        setStatus("File missing.");
-        return "";
-      }
-      const content = data.files[FILE_NAME].content || "";
-      chatBox.textContent = content || "(empty)";
-      chatBox.scrollTop = chatBox.scrollHeight;
-      setStatus("Chat updated " + new Date().toLocaleTimeString());
-      return content;
-    } catch(err) {
-      chatBox.textContent = "(error loading chat)";
-      setStatus("Error: " + err.message);
-      console.error(err);
-      return "";
-    }
-  }
+    });
+    const data = await r.json();
+    const content = data.files[FILE_NAME].content;
+    document.getElementById("chat").textContent = content || "(empty)";
+}
 
-  // Update Gist
-  async function updateGistContent(newText) {
-    setStatus("Sending message…");
-    try {
-      const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+// =========================
+// SEND MESSAGE
+// =========================
+
+document.getElementById("send").onclick = async () => {
+    const txt = document.getElementById("msg").value.trim();
+    if (!txt) return;
+
+    const r = await fetch(`https://api.github.com/gists/${GIST_ID}`);
+    const data = await r.json();
+    const old = data.files[FILE_NAME].content || "";
+    const newText = old + "\nA: " + txt;
+
+    await fetch(`https://api.github.com/gists/${GIST_ID}`, {
         method: "PATCH",
         headers: {
-          "Accept": "application/vnd.github+json",
-          "Authorization": "token " + TOKEN,
-          "Content-Type": "application/json"
+            "Authorization": "token " + TOKEN,
+            "Content-Type": "application/json"
         },
-        body: JSON.stringify({ files: { [FILE_NAME]: { content: newText } } })
-      });
-      if(!r.ok) throw new Error("HTTP " + r.status);
-      setStatus("Sent ✓");
-      await fetchGistContent();
-      return true;
-    } catch(err) {
-      setStatus("Send failed: " + err.message);
-      console.error(err);
-      return false;
-    }
-  }
+        body: JSON.stringify({
+            files: { [FILE_NAME]: { content: newText } }
+        })
+    });
 
-  // Append a message
-  async function appendMessage(text) {
-    const current = await fetchGistContent();
-    const ts = new Date();
-    const hhmm = ts.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-    const line = `${username} [${hhmm}]: ${text}`;
-    const newContent = current && current !== "(empty)" ? current + "\n" + line : line;
-    await updateGistContent(newContent);
-  }
+    loadChat();
+    document.getElementById("msg").value = "";
+};
 
-  // Button events
-  btnSend.addEventListener("click", async () => {
-    const txt = messageInput.value.trim();
-    if(!txt) return;
-    messageInput.value = "";
-    await appendMessage(txt);
-  });
-
-  btnClear.addEventListener("click", async () => {
-    if(confirm("Delete all chat?")) {
-      await updateGistContent("");
-      chatBox.textContent = "(empty)";
-    }
-  });
-
-  messageInput.addEventListener("keydown", (e) => {
-    if(e.key==="Enter" && !e.shiftKey){
-      e.preventDefault();
-      btnSend.click();
-    }
-  });
-
-  // Initial load + auto-refresh
-  await fetchGistContent();
-  setInterval(fetchGistContent, 6000);
-
-})();
+loadChat();
+setInterval(loadChat, 5000);
 </script>
+
 </body>
 </html>
