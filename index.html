@@ -5,52 +5,26 @@
 <title>WhatsApp Gist Chat</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-body { margin:0; background:#e5ddd5; font-family:Arial; }
+body { margin:0; background:#e5ddd5; font-family:Arial; display:flex; flex-direction:column; height:100vh; }
 #top { padding:14px; background:#075e54; color:white; font-size:18px; }
 #tiny { font-size:11px; opacity:0.8; }
 #chatBox {
     padding:10px;
-    height:70vh;
+    flex:1;
     overflow-y:auto;
     display:flex;
     flex-direction:column;
 }
-.msgA {
-    align-self:flex-start;
-    background:white;
-    padding:8px 12px;
-    border-radius:10px;
-    margin:4px 0;
-    max-width:70%;
-}
-.msgB {
-    align-self:flex-end;
-    background:#dcf8c6;
-    padding:8px 12px;
-    border-radius:10px;
-    margin:4px 0;
-    max-width:70%;
-}
+.msgA { align-self:flex-start; background:white; padding:8px 12px; border-radius:10px; margin:4px 0; max-width:70%; }
+.msgB { align-self:flex-end; background:#dcf8c6; padding:8px 12px; border-radius:10px; margin:4px 0; max-width:70%; }
 #inputWrap {
     padding:10px;
     background:#f0f0f0;
     display:flex;
     gap:6px;
 }
-textarea {
-    flex:1;
-    border-radius:10px;
-    padding:8px;
-    border:1px solid #ccc;
-}
-button {
-    padding:10px 14px;
-    border:none;
-    border-radius:10px;
-    background:#25d366;
-    color:white;
-    font-weight:bold;
-}
+textarea { flex:1; border-radius:10px; padding:8px; border:1px solid #ccc; resize:none; }
+button { padding:10px 14px; border:none; border-radius:10px; background:#25d366; color:white; font-weight:bold; }
 </style>
 </head>
 <body>
@@ -63,13 +37,13 @@ button {
 <div id="chatBox">Loading…</div>
 
 <div id="inputWrap">
-    <textarea id="msg"></textarea>
+    <textarea id="msg" placeholder="Type message…"></textarea>
     <button id="send">Send</button>
 </div>
 
 <script>
 // =========================
-// Decrypt token (XOR + Base64)
+// Decrypt token
 // =========================
 function xorDecrypt(base64, password) {
     const data = atob(base64);
@@ -87,72 +61,91 @@ const GIST_ID = "bacb0944d51800b24bc9b3e54bfb4216";
 const FILE_NAME = "gistfile1.txt";
 let ROLE = "A";
 
-// Detect IP → assign A or B
+// =========================
+// Detect role by IP
+// =========================
 async function detectRole() {
     try {
-        const r = await fetch("https://api.ipify.org?format=json");
-        const j = await r.json();
+        const res = await fetch("https://api.ipify.org?format=json");
+        const j = await res.json();
         const last = parseInt(j.ip.split(".").pop());
         ROLE = last % 2 === 0 ? "A" : "B";
     } catch(e) {
-        ROLE = "A"; 
+        ROLE = "A";
     }
 }
 
+// =========================
+// Load chat
+// =========================
 async function loadChat() {
-    const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-        headers:{ "Authorization":"token "+TOKEN }
-    });
-    const data = await r.json();
-    const raw = data.files[FILE_NAME].content || "";
-    drawChat(raw);
+    try {
+        const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+            headers:{ "Authorization":"token "+TOKEN }
+        });
+        if(!r.ok) throw new Error("Failed to fetch");
+        const d = await r.json();
+        const raw = d.files[FILE_NAME]?.content || "";
+        drawChat(raw);
+    } catch(e) {
+        document.getElementById("chatBox").textContent = "(error loading chat)";
+        console.error(e);
+    }
 }
 
 function drawChat(text) {
     const box = document.getElementById("chatBox");
     box.innerHTML = "";
-    if (!text.trim()) { box.textContent="(empty)"; return; }
-
-    const lines = text.split("\n");
-    for (let line of lines) {
-        let div = document.createElement("div");
-        if (line.startsWith("A:")) div.className="msgA";
-        else if (line.startsWith("B:")) div.className="msgB";
+    if(!text.trim()){ box.textContent="(empty)"; return; }
+    text.split("\n").forEach(line=>{
+        const div = document.createElement("div");
+        if(line.startsWith("A:")) div.className="msgA";
+        else if(line.startsWith("B:")) div.className="msgB";
         else div.className="msgA";
-        div.textContent = line;
+        div.textContent=line;
         box.appendChild(div);
-    }
+    });
     box.scrollTop = box.scrollHeight;
 }
 
-document.getElementById("send").onclick = async () => {
+// =========================
+// Send message
+// =========================
+document.getElementById("send").onclick = async ()=>{
     const msg = document.getElementById("msg").value.trim();
-    if (!msg) return;
-
-    const r = await fetch(`https://api.github.com/gists/${GIST_ID}`);
-    const d = await r.json();
-    const old = d.files[FILE_NAME].content || "";
-    const newText = old + "\n" + ROLE + ": " + msg;
-
-    await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-        method:"PATCH",
-        headers:{
-            "Authorization":"token "+TOKEN,
-            "Content-Type":"application/json"
-        },
-        body:JSON.stringify({
-            files:{ [FILE_NAME]:{ content:newText } }
-        })
-    });
-
-    document.getElementById("msg").value="";
-    loadChat();
+    if(!msg) return;
+    try {
+        // Get current content
+        const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+            headers:{ "Authorization":"token "+TOKEN }
+        });
+        const d = await r.json();
+        const old = d.files[FILE_NAME]?.content || "";
+        const newText = old + "\n" + ROLE + ": " + msg;
+        // PATCH updated content
+        await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+            method:"PATCH",
+            headers:{
+                "Authorization":"token "+TOKEN,
+                "Content-Type":"application/json"
+            },
+            body:JSON.stringify({ files:{ [FILE_NAME]:{ content:newText } } })
+        });
+        document.getElementById("msg").value="";
+        loadChat();
+    } catch(e) {
+        console.error(e);
+        alert("Failed to send message.");
+    }
 };
 
-(async () => {
+// =========================
+// INIT
+// =========================
+(async ()=>{
     await detectRole();
     await loadChat();
-    setInterval(loadChat, 5000);
+    setInterval(loadChat,5000);
 })();
 </script>
 
