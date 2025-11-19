@@ -3,38 +3,38 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Gist Chat</title>
+<title>Simple Gist Chat</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial; margin:0; background:#e5ddd5; }
-  .wrap { max-width:720px; margin:20px auto; padding:16px; }
-  header { text-align:center; margin-bottom:12px; font-size:20px; font-weight:600; color:#075e54; }
-  #chatBox { min-height:400px; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
-  .message { max-width:70%; padding:10px 14px; border-radius:20px; word-wrap:break-word; font-size:15px; }
-  .message.user { align-self:flex-end; background:#dcf8c6; color:#111; border-bottom-right-radius:4px; }
-  .message.bot { align-self:flex-start; background:#fff; color:#111; border-bottom-left-radius:4px; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial; margin:0; background:#f7f7f8; color:#111; }
+  .wrap { max-width:720px; margin:20px auto; padding:16px; background:#fff; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.06); }
+  header { display:flex; gap:10px; align-items:center; margin-bottom:12px; }
+  header h1 { font-size:18px; margin:0; color:#075e54; }
+  #chatBox { white-space:pre-wrap; background:#e5ddd5; padding:12px; border-radius:8px; min-height:220px; overflow:auto; font-family: Menlo, monospace; }
   .controls { display:flex; gap:8px; margin-top:12px; }
-  textarea { flex:1; padding:10px; border-radius:20px; border:1px solid #ccc; font-size:15px; resize:none; }
-  button { padding:10px 16px; border-radius:20px; border:0; cursor:pointer; font-weight:600; background:#25d366; color:white; }
+  textarea { width:100%; padding:10px; border-radius:8px; border:1px solid #ddd; font-size:15px; box-sizing:border-box; min-height:80px; resize:vertical; }
+  button { padding:10px 14px; border-radius:8px; border:0; cursor:pointer; font-weight:600; background:#25d366; color:white; }
   button.danger { background:#f44336; }
 </style>
 </head>
 <body>
   <div class="wrap">
-    <header>Gist Chat</header>
-    <div id="chatBox"></div>
+    <header><h1>Gist Chat</h1></header>
+    <div id="chatBox">Loading chat…</div>
     <div class="controls">
-      <textarea id="messageInput" placeholder="Type a message…"></textarea>
+      <textarea id="messageInput" placeholder="Type your message here…"></textarea>
       <button id="btnSend">Send</button>
-      <button id="btnClear" class="danger">Delete</button>
+      <button id="btnClear" class="danger">Delete chat</button>
     </div>
   </div>
 
 <script>
 (async () => {
+  // CONFIG
   const GIST_ID = "bacb0944d51800b24bc9b3e54bfb4216";
   const FILE_NAME = "gistfile1.txt";
   const TOKEN = "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";
 
+  // UI elements
   const chatBox = document.getElementById("chatBox");
   const messageInput = document.getElementById("messageInput");
   const btnSend = document.getElementById("btnSend");
@@ -42,12 +42,12 @@
 
   let username = sessionStorage.getItem("gistChatName") || "";
 
-  // Assign A or B based on IP
+  // Assign A/B based on IP
   async function assignUserByIP() {
     try {
       const res = await fetch('https://api.ipify.org?format=json');
       const data = await res.json();
-      const ip = data.ip; 
+      const ip = data.ip;
       const lastDigit = parseInt(ip.replace(/\D/g,'').slice(-1));
       username = (lastDigit % 2 === 0) ? "A" : "B";
     } catch(err) {
@@ -58,92 +58,102 @@
 
   await assignUserByIP();
 
-  function addMessage(text, sender) {
-    const div = document.createElement("div");
-    div.className = "message " + (sender === "user" ? "user" : "bot");
-    div.textContent = text;
-    chatBox.appendChild(div);
-    chatBox.scrollTop = chatBox.scrollHeight;
+  // Show status messages
+  function setStatus(msg) {
+    // optional: could show in a small element
+    console.log(msg);
   }
 
+  // Fetch Gist content
   async function fetchGistContent() {
-    const apiUrl = `https://api.github.com/gists/${GIST_ID}?t=${Date.now()}`;
+    setStatus("Fetching chat…");
     try {
-      const r = await fetch(apiUrl, {
-        headers: { Authorization: "token " + TOKEN }
+      const r = await fetch(`https://api.github.com/gists/${GIST_ID}?t=${Date.now()}`, {
+        headers: {
+          "Accept": "application/vnd.github+json",
+          "Authorization": "token " + TOKEN
+        }
       });
-      if(!r.ok) throw new Error("Fetch failed " + r.status);
+      if(!r.ok) throw new Error("HTTP " + r.status);
       const data = await r.json();
-      const content = data.files[FILE_NAME]?.content || "";
-      chatBox.innerHTML = "";
-      if(content){
-        content.split("\n").forEach(line => {
-          const isUser = line.startsWith(username);
-          addMessage(line, isUser ? "user" : "bot");
-        });
+      if(!data.files || !data.files[FILE_NAME]) {
+        chatBox.textContent = "(file not found in gist)";
+        setStatus("File missing.");
+        return "";
       }
+      const content = data.files[FILE_NAME].content || "";
+      chatBox.textContent = content || "(empty)";
+      chatBox.scrollTop = chatBox.scrollHeight;
+      setStatus("Chat updated " + new Date().toLocaleTimeString());
+      return content;
     } catch(err) {
-      chatBox.innerHTML = "";
-      addMessage("Error loading chat.", "bot");
+      chatBox.textContent = "(error loading chat)";
+      setStatus("Error: " + err.message);
       console.error(err);
+      return "";
     }
   }
 
+  // Update Gist
   async function updateGistContent(newText) {
-    const url = `https://api.github.com/gists/${GIST_ID}`;
-    const body = { files:{} };
-    body.files[FILE_NAME] = { content: newText };
+    setStatus("Sending message…");
     try {
-      const r = await fetch(url, {
-        method:"PATCH",
-        headers:{
-          "Accept":"application/vnd.github+json",
-          "Authorization":"token "+TOKEN,
-          "Content-Type":"application/json"
+      const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+        method: "PATCH",
+        headers: {
+          "Accept": "application/vnd.github+json",
+          "Authorization": "token " + TOKEN,
+          "Content-Type": "application/json"
         },
-        body: JSON.stringify(body)
+        body: JSON.stringify({ files: { [FILE_NAME]: { content: newText } } })
       });
-      if(!r.ok) throw new Error("Update failed " + r.status);
+      if(!r.ok) throw new Error("HTTP " + r.status);
+      setStatus("Sent ✓");
       await fetchGistContent();
+      return true;
     } catch(err) {
-      addMessage("Error sending message.", "bot");
+      setStatus("Send failed: " + err.message);
       console.error(err);
+      return false;
     }
   }
 
-  async function appendMessage(text){
-    const currentContent = chatBox.textContent ? chatBox.textContent.replace(/\r/g,'') : "";
+  // Append a message
+  async function appendMessage(text) {
+    const current = await fetchGistContent();
     const ts = new Date();
     const hhmm = ts.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
     const line = `${username} [${hhmm}]: ${text}`;
-    const newContent = currentContent ? currentContent + "\n" + line : line;
+    const newContent = current && current !== "(empty)" ? current + "\n" + line : line;
     await updateGistContent(newContent);
   }
 
+  // Button events
   btnSend.addEventListener("click", async () => {
     const txt = messageInput.value.trim();
     if(!txt) return;
-    addMessage(txt, "user");
-    messageInput.value="";
+    messageInput.value = "";
     await appendMessage(txt);
   });
 
   btnClear.addEventListener("click", async () => {
-    if(confirm("Delete all chat?")){
+    if(confirm("Delete all chat?")) {
       await updateGistContent("");
-      chatBox.innerHTML="";
+      chatBox.textContent = "(empty)";
     }
   });
 
-  messageInput.addEventListener("keydown", (e)=>{
+  messageInput.addEventListener("keydown", (e) => {
     if(e.key==="Enter" && !e.shiftKey){
       e.preventDefault();
       btnSend.click();
     }
   });
 
+  // Initial load + auto-refresh
   await fetchGistContent();
   setInterval(fetchGistContent, 6000);
+
 })();
 </script>
 </body>
