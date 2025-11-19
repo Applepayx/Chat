@@ -2,97 +2,158 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Encrypted Token Gist Chat</title>
+<title>WhatsApp Gist Chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-body { font-family: Arial; background:#f7f7f8; }
-#chat { white-space: pre-wrap; background:#eee; padding:10px; border-radius:8px; min-height:200px; }
-textarea { width:100%; height:80px; }
-button { padding:8px 14px; margin-top:6px; }
+body { margin:0; background:#e5ddd5; font-family:Arial; }
+#top { padding:14px; background:#075e54; color:white; font-size:18px; }
+#tiny { font-size:11px; opacity:0.8; }
+#chatBox {
+    padding:10px;
+    height:70vh;
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column;
+}
+.msgA {
+    align-self:flex-start;
+    background:white;
+    padding:8px 12px;
+    border-radius:10px;
+    margin:4px 0;
+    max-width:70%;
+}
+.msgB {
+    align-self:flex-end;
+    background:#dcf8c6;
+    padding:8px 12px;
+    border-radius:10px;
+    margin:4px 0;
+    max-width:70%;
+}
+#inputWrap {
+    padding:10px;
+    background:#f0f0f0;
+    display:flex;
+    gap:6px;
+}
+textarea {
+    flex:1;
+    border-radius:10px;
+    padding:8px;
+    border:1px solid #ccc;
+}
+button {
+    padding:10px 14px;
+    border:none;
+    border-radius:10px;
+    background:#25d366;
+    color:white;
+    font-weight:bold;
+}
 </style>
 </head>
 <body>
 
-<h2>Encrypted Token Chat</h2>
-<div id="chat">Loading…</div>
-<textarea id="msg"></textarea>
-<button id="send">Send</button>
+<div id="top">
+    WhatsApp Chat<br>
+    <span id="tiny">Applepayx/gist:bacb0944d51800b24bc9b3e54bfb4216</span>
+</div>
+
+<div id="chatBox">Loading…</div>
+
+<div id="inputWrap">
+    <textarea id="msg"></textarea>
+    <button id="send">Send</button>
+</div>
 
 <script>
 // =========================
-// XOR + Base64 Decryption
+// Decrypt token (XOR + Base64)
 // =========================
-
 function xorDecrypt(base64, password) {
     const data = atob(base64);
     let out = "";
-    for (let i = 0; i < data.length; i++) {
+    for (let i=0;i<data.length;i++) {
         out += String.fromCharCode(data.charCodeAt(i) ^ password.charCodeAt(i % password.length));
     }
     return out;
 }
 
-// =========================
-// ENCRYPTED TOKEN
-// =========================
-
-const encryptedToken = "EQcNEBQTFxUNFQ8VHRQHEQUZAwIVBwYSGRIrEB0fCgYcHkM=";
-const password = "mrx";       // your password
-const TOKEN = xorDecrypt(encryptedToken, password); // decrypted token
-
-console.log("Decrypted token used:", TOKEN);  // you can remove this line
-
-// =========================
-// GIST CONFIG
-// =========================
+const encryptedToken = "GxYfFR4iGhsAExQVEBQcFRUbAQ8PEx0JFRUuEBcbBxETGkc=";
+const TOKEN = xorDecrypt(encryptedToken, "mrx");
 
 const GIST_ID = "bacb0944d51800b24bc9b3e54bfb4216";
 const FILE_NAME = "gistfile1.txt";
+let ROLE = "A";
 
-// =========================
-// LOAD CHAT
-// =========================
+// Detect IP → assign A or B
+async function detectRole() {
+    try {
+        const r = await fetch("https://api.ipify.org?format=json");
+        const j = await r.json();
+        const last = parseInt(j.ip.split(".").pop());
+        ROLE = last % 2 === 0 ? "A" : "B";
+    } catch(e) {
+        ROLE = "A"; 
+    }
+}
 
 async function loadChat() {
     const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-        headers: {
-            "Authorization": "token " + TOKEN
-        }
+        headers:{ "Authorization":"token "+TOKEN }
     });
     const data = await r.json();
-    const content = data.files[FILE_NAME].content;
-    document.getElementById("chat").textContent = content || "(empty)";
+    const raw = data.files[FILE_NAME].content || "";
+    drawChat(raw);
 }
 
-// =========================
-// SEND MESSAGE
-// =========================
+function drawChat(text) {
+    const box = document.getElementById("chatBox");
+    box.innerHTML = "";
+    if (!text.trim()) { box.textContent="(empty)"; return; }
+
+    const lines = text.split("\n");
+    for (let line of lines) {
+        let div = document.createElement("div");
+        if (line.startsWith("A:")) div.className="msgA";
+        else if (line.startsWith("B:")) div.className="msgB";
+        else div.className="msgA";
+        div.textContent = line;
+        box.appendChild(div);
+    }
+    box.scrollTop = box.scrollHeight;
+}
 
 document.getElementById("send").onclick = async () => {
-    const txt = document.getElementById("msg").value.trim();
-    if (!txt) return;
+    const msg = document.getElementById("msg").value.trim();
+    if (!msg) return;
 
     const r = await fetch(`https://api.github.com/gists/${GIST_ID}`);
-    const data = await r.json();
-    const old = data.files[FILE_NAME].content || "";
-    const newText = old + "\nA: " + txt;
+    const d = await r.json();
+    const old = d.files[FILE_NAME].content || "";
+    const newText = old + "\n" + ROLE + ": " + msg;
 
     await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-        method: "PATCH",
-        headers: {
-            "Authorization": "token " + TOKEN,
-            "Content-Type": "application/json"
+        method:"PATCH",
+        headers:{
+            "Authorization":"token "+TOKEN,
+            "Content-Type":"application/json"
         },
-        body: JSON.stringify({
-            files: { [FILE_NAME]: { content: newText } }
+        body:JSON.stringify({
+            files:{ [FILE_NAME]:{ content:newText } }
         })
     });
 
+    document.getElementById("msg").value="";
     loadChat();
-    document.getElementById("msg").value = "";
 };
 
-loadChat();
-setInterval(loadChat, 5000);
+(async () => {
+    await detectRole();
+    await loadChat();
+    setInterval(loadChat, 5000);
+})();
 </script>
 
 </body>
