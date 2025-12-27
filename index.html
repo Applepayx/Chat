@@ -1,75 +1,410 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Dual AI Coach — ChatGPT + Hume AI</title>
+    <meta charset="UTF-8">
+    <title>Course Player</title>
+    <style>
+        :root {
+            --primary-blue: #0056D2;
+            --success-green: #007936;
+            --gray-text: #636363;
+            --border-color: #D1D7DC;
+            --sidebar-width: 350px;
+        }
 
-<style>
-  body { font-family: Arial, sans-serif; background: #fafafa; padding: 20px; }
-  h2 { color: #222; }
-  .section { margin-bottom: 40px; border: 1px solid #ccc; padding: 15px; border-radius: 8px; background: #fff; }
-  iframe { width: 100%; height: 600px; border: 1px solid #ddd; border-radius: 6px; }
-</style>
+        body { 
+            font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            margin: 0; display: flex; height: 100vh; overflow: hidden; background: #000;
+        }
 
+        /* --- SPLASH SCREEN --- */
+        .upload-overlay { 
+            position: absolute; inset: 0; background: radial-gradient(circle at center, #1e1e1e 0%, #000 100%); 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9000; 
+        }
+        .welcome-card {
+            background: #fff; padding: 40px; border-radius: 12px; text-align: center;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5); max-width: 400px;
+        }
+        .welcome-card h1 { color: #1f1f1f; font-size: 24px; margin-bottom: 10px; }
+        .welcome-card p { color: var(--gray-text); margin-bottom: 30px; font-size: 14px; }
+        .start-btn { 
+            background: var(--primary-blue); color: white; border: none; padding: 15px 40px; 
+            border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: transform 0.2s;
+        }
+        .start-btn:hover { transform: scale(1.05); background: #004bb8; }
+
+        /* --- UI OVERLAYS --- */
+		/* --- UNIFIED UI BOXES [cite: 2025-12-21] --- */
+		.floating-toggle, .progress-badge {
+			position: fixed; 
+			top: 10px; /* Aligned both to the same top position [cite: 2025-12-21] */
+			z-index: 5001;
+			background: rgba(0, 0, 0, 0.7); 
+			backdrop-filter: blur(10px);
+			border: 1px solid rgba(255, 255, 255, 0.4); 
+			border-radius: 6px;
+			
+			/* Forced Identical Size [cite: 2025-12-21] */
+			width: 38px; 
+			height: 38px; 
+			display: flex; 
+			align-items: center; 
+			justify-content: center;
+			box-sizing: border-box;
+			transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		}
+
+		.floating-toggle { 
+			left: 10px; 
+			cursor: pointer; 
+			padding: 0; /* Padding handled by flex centering now */
+		}
+
+		.progress-badge { 
+			left: 55px; /* Positioned right next to the sidebar button [cite: 2025-12-21] */
+			color: #fff; 
+			font-size: 11px; 
+			font-weight: 800; 
+			pointer-events: none;
+			box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+		}
+
+		/* --- BETTER ICON (Grid Logo) [cite: 2025-12-21] --- */
+		.floating-toggle .icon-grid {
+			display: grid;
+			grid-template-columns: repeat(2, 1fr);
+			gap: 3px;
+		}
+		.floating-toggle .icon-grid div {
+			width: 6px;
+			height: 6px;
+			background: #fff;
+			border-radius: 1px;
+			transition: transform 0.3s;
+		}
+
+		/* --- EFFECTS & HOVER BS [cite: 2025-12-21] --- */
+		.floating-toggle:hover {
+			background: rgba(0, 86, 210, 0.8); /* Glow blue on hover */
+			border-color: rgba(255, 255, 255, 0.8);
+			transform: translateY(-2px);
+		}
+
+		.floating-toggle:hover .icon-grid div {
+			transform: rotate(90deg); /* Modern icon rotation effect */
+		}
+
+		/* Subtle Pulse for Progress when it updates [cite: 2025-12-21] */
+		.progress-badge {
+			animation: badge-entry 0.5s ease-out;
+		}
+
+		@keyframes badge-entry {
+			0% { transform: scale(0.8); opacity: 0; }
+			100% { transform: scale(1); opacity: 1; }
+		}
+        /* Go to next item - Positioned at bottom: 8px */
+        .bottom-next-area { position: fixed; bottom: 8px; right: 40px; z-index: 5000; }
+        .btn-go-next {
+            background: var(--primary-blue); color: white; border: none;
+            padding: 12px 35px; border-radius: 4px; font-weight: 700; cursor: pointer;
+            font-size: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); transition: all 0.2s;
+        }
+        .btn-go-next:hover { background: #0041a3; }
+
+        /* --- SIDEBAR & SEARCH --- */
+        .sidebar {
+            width: var(--sidebar-width); border-right: 1px solid #e5e5e5;
+            display: flex; flex-direction: column; background: #fff;
+            transition: width 0.3s ease; flex-shrink: 0; z-index: 4500; overflow: hidden;
+        }
+        .sidebar.hidden { width: 0; border-right: none; }
+        
+		.sidebar-header { /* 85px top padding keeps it below your floating buttons [cite: 2025-12-21] */ padding: 55px 15px 15px 15px; border-bottom: 1px solid #e5e5e5; display: flex; flex-direction: column; /* This centers the items horizontally [cite: 2025-12-21] */ align-items: center; gap: 12px; /* Ensures multiline text is centered [cite: 2025-12-21] */ text-align: center; }        
+		.module-title { color: var(--primary-blue); font-size: 15px; font-weight: 700; text-transform: uppercase; }        
+        /* Search Bar */
+        .search-container { position: relative; margin: 0 15px 10px 15px; }
+        #sidebarSearch {
+            width: 100%; padding: 10px 12px; border-radius: 20px; border: 1px solid var(--border-color);
+            font-size: 13px; outline: none; background: #f8f9fa; box-sizing: border-box;
+        }
+        #sidebarSearch:focus { border-color: var(--primary-blue); background: #fff; }
+
+        .btn-clear-progress { background: none; border: none; color: var(--gray-text); font-size: 10px; text-decoration: underline; cursor: pointer; padding: 0; width: fit-content; }
+        
+        .item-list { overflow-y: auto; flex-grow: 1; min-width: var(--sidebar-width); }
+
+        .course-item { padding: 18px 20px; display: flex; gap: 15px; cursor: pointer; border-bottom: 1px solid #f9f9f9; background: white; }
+        .course-item.active { background: #f0f7ff; border-left: 5px solid var(--primary-blue); }
+        .status-icon { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #aaa; flex-shrink: 0; display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+        .course-item.completed .status-icon { background: var(--success-green); border-color: var(--success-green); color: white; }
+        .course-item.completed .status-icon::after { content: '✓'; font-size: 13px; font-weight: bold; }
+        
+        .item-info div:first-child { font-size: 14px; font-weight: 600; color: #1f1f1f; line-height: 1.4; }
+        .item-info div:last-child { font-size: 12px; color: var(--gray-text); margin-top: 2px; }
+
+        /* --- CINEMA VIDEO PLAYER --- */
+        .video-container {
+            width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: radial-gradient(circle, #1a1a1a 0%, #000 100%); position: relative;
+        }
+        video { max-width: 95%; max-height: 80%; border-radius: 4px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); outline: none; }
+        
+        /* Auto-Play Toggle (Lowered for symmetry) */
+        .autoplay-overlay {
+            position: absolute; bottom: 8px; left: 20px; z-index: 5001;
+            background: rgba(0,0,0,0.6); padding: 8px 15px; border-radius: 20px;
+            color: white; font-size: 12px; display: flex; align-items: center; gap: 8px;
+            border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(5px);
+        }
+        .autoplay-overlay input { cursor: pointer; accent-color: var(--primary-blue); }
+
+        /* --- CONTENT AREA --- */
+        .app-container { display: flex; width: 100%; height: 100vh; overflow: hidden; position: relative; }
+        .main-content { flex: 1; position: relative; background: #000; overflow: hidden; height: 100%; }
+        .iframe-wrapper { width: 100%; height: 100%; overflow: hidden; position: relative; background: white; }
+        .html-frame { position: absolute; top: -65px; left: 0; width: 100%; height: calc(100% + 65px); border: none; }
+        .viewer-container { width: 100%; height: 100%; overflow-y: auto; }
+        #content-box { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .reading-area { width: 90%; max-width: 850px; padding: 100px 0; font-size: 18px; line-height: 1.8; color: #eee; }
+        .reading-area h2 { color: white; border-bottom: 1px solid #333; padding-bottom: 10px; margin-top: 40px; }
+        
+        .hidden { display: none !important; }
+		/* The celebration movement and color change [cite: 2025-12-21] */
+		@keyframes popCelebration {
+			0% { transform: scale(1); }
+			40% { 
+				transform: scale(1.5) rotate(-5deg); 
+				background: rgba(255, 215, 0, 0.95); 
+				color: #000; 
+				box-shadow: 0 0 25px rgba(255, 215, 0, 0.8); 
+			}
+			60% { transform: scale(1.5) rotate(5deg); }
+			100% { transform: scale(1); }
+		}
+
+		/* This class triggers the animation above [cite: 2025-12-21] */
+		.progress-badge.celebrating {
+			animation: popCelebration 0.8s ease-out forwards;
+		}
+    </style>
 </head>
 <body>
 
-<h1>🌐 Dual AI Coach — ChatGPT + Hume AI</h1>
-
-<!-- ==================== CHAPTER 1: CHATGPT EMBED ==================== -->
-<div class="section" id="chatgpt-section">
-  <h2>ChatGPT (Embedded Link)</h2>
-  <p>If the iframe doesn’t show, it’s due to OpenAI blocking embedding — scroll down for Hume AI.</p>
-
-  <!-- Replace the "XXXXX" with your ChatGPT Share link -->
-  <iframe
-    src="https://chat.openai.com/share/694f9a48-9f8c-8010-a30e-70e572d71d30"
-    sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-  ></iframe>
-
-  <p>Note: Not all share links allow iframe embedding because OpenAI configures headers to block framing.</p>
+<div class="upload-overlay" id="upload-overlay">
+    <div class="welcome-card">
+        <h1>Course Player</h1>
+        <p>Upload your local course folder to begin learning in Cinema Mode.</p>
+        <button class="start-btn" onclick="triggerPicker()">OPEN COURSE FOLDER</button>
+        <input type="file" id="folderInput" webkitdirectory directory multiple class="hidden">
+    </div>
 </div>
 
-<!-- ==================== CHAPTER 2: HUME AI WIDGET ==================== -->
-<div class="section" id="hume-section">
-  <h2>Hume AI Coach</h2>
-  <p>This uses the Hume AI embed widget. It must be hosted over HTTPS.</p>
+<div class="floating-toggle" onclick="toggleSidebar()">
+    <div class="icon-grid">
+        <div></div><div></div>
+        <div></div><div></div>
+    </div>
+</div>
+<div class="progress-badge" id="progress-val">0%</div>
 
-  <div id="hume-widget">Loading Hume AI...</div>
+<div class="bottom-next-area">
+    <button class="btn-go-next" id="nextBtn" onclick="goToNext()">Go to next item →</button>
+</div>
 
-  <!-- Add the Hume Embed SDK -->
-  <script src="https://cdn.jsdelivr.net/npm/@humeai/voice-embed@latest/dist/voice-embed.min.js"></script>
+<div class="app-container">
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <span class="module-title" id="course-main-title">Loading Course...</span>
+            <button class="btn-clear-progress" onclick="clearProgress()">Reset Course Progress</button>
+        </div>
+        
+        <div class="search-container">
+            <input type="text" id="sidebarSearch" placeholder="Search lessons..." onkeyup="filterLessons()">
+        </div>
 
-  <script>
-    // ⚠ Replace this with your **actual Hume AI API Key**
-    const HUME_API_KEY = "lQLQHBNb75NbBJMmfjNIPFzglJbMkCwrkdYJAyhAUxTJ4D0H";
+        <div class="item-list" id="item-list"></div>
+    </div>
+    <div class="main-content" id="main-content">
+        <div class="viewer-container" id="scroll-area"><div id="content-box"></div></div>
+    </div>
+</div>
 
-    // Initialize the Hume AI embed
-    try {
-      const widget = new HumeAI.Embed({
-        container: document.getElementById('hume-widget'),
-        auth: {
-          type: 'apiKey',
-          value: HUME_API_KEY
-        },
-        onReady: () => console.log("Hume AI is ready"),
-        onMessage: (msg) => console.log("Hume AI says:", msg)
-      });
+<script>
+    const folderInput = document.getElementById('folderInput');
+    const itemList = document.getElementById('item-list');
+    const contentBox = document.getElementById('content-box');
+    const sidebar = document.getElementById('sidebar');
+    const nextBtn = document.getElementById('nextBtn');
+    const overlay = document.getElementById('upload-overlay');
+    const progressVal = document.getElementById('progress-val');
+    const scrollArea = document.getElementById('scroll-area');
+    const mainTitle = document.getElementById('course-main-title');
+	let lastMilestone = 0; // Tracks the last 10% milestone hit [cite: 2025-12-21]
+    let playlist = [];
+    let allFiles = [];
+    let currentIndex = 0;
+    let courseID = ""; 
+    let autoPlayEnabled = true;
 
-      // Optional: open the widget UI
-      widget.open();
-    } catch (err) {
-      document.getElementById('hume-widget').textContent = "Failed to initialize Hume AI: " + err;
+    function triggerPicker() { folderInput.click(); }
+    function toggleSidebar() { sidebar.classList.toggle('hidden'); }
+
+    function cleanStr(s) {
+        return s.replace(/coursera/gi, "").replace(/_/g, " ").replace(/,/g, "").trim();
     }
-  </script>
 
-  <p>If you see errors here, make sure you:</p>
-  <ul>
-    <li>Hosted this HTML on HTTPS (GitHub Pages, Netlify, Vercel)</li>
-    <li>Replaced YOUR_HUME_API_KEY_HERE with a valid key</li>
-    <li>Are using a supported browser (Chrome/Firefox) with JavaScript enabled</li>
-  </ul>
-</div>
+    function filterLessons() {
+        const query = document.getElementById('sidebarSearch').value.toLowerCase();
+        const items = document.querySelectorAll('.course-item');
+        items.forEach(item => {
+            const text = item.innerText.toLowerCase();
+            item.style.display = text.includes(query) ? 'flex' : 'none';
+        });
+    }
 
+    function clearProgress() {
+        if(confirm("Reset all progress?")) {
+            localStorage.removeItem(courseID);
+            Object.keys(localStorage).forEach(k => { if(k.startsWith(courseID)) localStorage.removeItem(k); });
+            playlist.forEach(i => i.completed = false);
+            renderSidebar(); updateOverallProgress();
+        }
+    }
+
+    folderInput.onchange = async (e) => {
+        allFiles = Array.from(e.target.files);
+        const filteredFiles = allFiles.filter(f => /^\d+/.test(f.name) && /\.(mp4|txt|html)$/i.test(f.name));
+        filteredFiles.sort((a, b) => parseInt(a.name.match(/^\d+/)[0]) - parseInt(b.name.match(/^\d+/)[0]));
+
+        if (filteredFiles.length > 0) {
+            const folderName = filteredFiles[0].webkitRelativePath.split('/')[0];
+            mainTitle.innerText = cleanStr(folderName);
+        }
+
+        courseID = "course_" + btoa(filteredFiles.map(f => f.name).join(',')).substring(0, 15);
+        const savedProgress = JSON.parse(localStorage.getItem(courseID) || "[]");
+
+        playlist = await Promise.all(filteredFiles.map(async (f) => {
+            let fullBase = f.name.split('.').slice(0, -1).join('.');
+            let cleanName = cleanStr(fullBase.replace(/^\d+\s*(?:_\s*)?/, ""));
+            let isQuiz = f.name.toLowerCase().includes('quiz');
+            let type = isQuiz ? 'Quiz' : (f.name.toLowerCase().endsWith('.mp4') ? 'Video' : 'Reading');
+            let durationText = (type === 'Video') ? await getVideoDuration(f) : await getReadingTime(f);
+            const subFile = allFiles.find(sf => sf.name.startsWith(fullBase) && /\.(vtt|srt)$/i.test(sf.name));
+
+            return { file: f, title: cleanName, type: type, duration: durationText, completed: savedProgress.includes(f.name), subtitle: subFile || null };
+        }));
+
+        overlay.classList.add('hidden'); renderSidebar(); loadItem(0); updateOverallProgress();
+    };
+
+    function getVideoDuration(file) {
+        return new Promise(r => {
+            const v = document.createElement('video');
+            v.onloadedmetadata = () => { window.URL.revokeObjectURL(v.src); r(`${Math.ceil(v.duration / 60)} min`); };
+            v.src = URL.createObjectURL(file);
+        });
+    }
+
+    function getReadingTime(file) {
+        return new Promise(r => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                let text = "";
+                if (file.name.endsWith('.html')) {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(e.target.result, 'text/html');
+                    text = doc.body.innerText || "";
+                } else { text = e.target.result; }
+                r(`${Math.ceil(text.trim().split(/\s+/).length / 200)} min`);
+            };
+            reader.readAsText(file);
+        });
+    }
+
+	function updateOverallProgress() {
+		if (playlist.length === 0) return;
+		const completedCount = playlist.filter(item => item.completed).length;
+		const percent = Math.round((completedCount / playlist.length) * 100);
+		progressVal.innerText = `${percent}%`;
+		
+		// --- CELEBRATION LOGIC ---
+		// Calculates the current 10% "floor" (e.g., 23% becomes 20) [cite: 2025-12-21]
+		const currentMilestone = Math.floor(percent / 10) * 10;
+
+		// Trigger if you hit a new 10% mark [cite: 2025-12-21]
+		if (currentMilestone > lastMilestone && currentMilestone >= 10) {
+			 progressVal.classList.add('celebrating');
+			 
+			 // Remove the class so it can play again at the next 10% [cite: 2025-12-21]
+			 setTimeout(() => {
+				 progressVal.classList.remove('celebrating');
+			 }, 800); 
+			 
+			 lastMilestone = currentMilestone;
+		}
+		
+		localStorage.setItem(courseID, JSON.stringify(playlist.filter(i => i.completed).map(i => i.file.name)));
+	}
+
+    function renderSidebar() {
+        itemList.innerHTML = '';
+        playlist.forEach((item, index) => {
+            const div = document.createElement('div');
+            div.className = `course-item ${index === currentIndex ? 'active' : ''} ${item.completed ? 'completed' : ''}`;
+            div.onclick = () => loadItem(index);
+            div.innerHTML = `<div class="status-icon"></div><div class="item-info"><div>${item.title}</div><div>${item.type} • ${item.duration}</div></div>`;
+            itemList.appendChild(div);
+        });
+    }
+
+    function loadItem(index) {
+        currentIndex = index;
+        const entry = playlist[index];
+        contentBox.innerHTML = '';
+        scrollArea.scrollTop = 0;
+        renderSidebar();
+
+        if (entry.type === 'Video') {
+            const wrap = document.createElement('div'); wrap.className = 'video-container';
+            const v = document.createElement('video');
+            v.src = URL.createObjectURL(entry.file); v.controls = true; v.autoplay = true;
+            if (entry.subtitle) {
+                const track = document.createElement('track'); track.kind = "captions"; track.label = "English"; track.src = URL.createObjectURL(entry.subtitle); track.default = true;
+                v.appendChild(track);
+            }
+            const timeKey = `${courseID}_${entry.file.name}_time`;
+            const savedTime = localStorage.getItem(timeKey);
+            if (savedTime) v.currentTime = parseFloat(savedTime);
+            v.ontimeupdate = () => localStorage.setItem(timeKey, v.currentTime);
+            v.onended = () => { markComplete(index); if(autoPlayEnabled && currentIndex < playlist.length - 1) goToNext(); };
+
+            const apToggle = document.createElement('div');
+            apToggle.className = 'autoplay-overlay';
+            apToggle.innerHTML = `<input type="checkbox" id="ap-check" ${autoPlayEnabled ? 'checked' : ''}> <label for="ap-check">Auto-Play Next</label>`;
+            apToggle.querySelector('input').onchange = (e) => autoPlayEnabled = e.target.checked;
+
+            wrap.appendChild(v); wrap.appendChild(apToggle); contentBox.appendChild(wrap);
+        } else if (entry.file.name.endsWith('.html')) {
+            const wrapper = document.createElement('div'); wrapper.className = 'iframe-wrapper';
+            const iframe = document.createElement('iframe'); iframe.className = 'html-frame';
+            iframe.src = URL.createObjectURL(entry.file);
+            wrapper.appendChild(iframe); contentBox.appendChild(wrapper);
+        } else {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                let html = `<div class="reading-area">${e.target.result.split('\n').map(l => `<p>${l}</p>`).join('')}</div>`;
+                contentBox.innerHTML = html;
+            };
+            reader.readAsText(entry.file);
+        }
+        nextBtn.disabled = index === playlist.length - 1;
+    }
+
+    function markComplete(idx) { playlist[idx].completed = true; renderSidebar(); updateOverallProgress(); }
+    function goToNext() { markComplete(currentIndex); if (currentIndex < playlist.length - 1) loadItem(currentIndex + 1); }
+</script>
 </body>
 </html>
