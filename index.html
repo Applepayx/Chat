@@ -1,6 +1,75 @@
-<iframe 
-    src="https://chat.openai.com/share/694f9915-ce04-8010-94f2-524fa7b52897"
-    width="100%" 
-    height="800"
-    frameborder="0">
-</iframe>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dual AI Coach — ChatGPT + Hume AI</title>
+
+<style>
+  body { font-family: Arial, sans-serif; background: #fafafa; padding: 20px; }
+  h2 { color: #222; }
+  .section { margin-bottom: 40px; border: 1px solid #ccc; padding: 15px; border-radius: 8px; background: #fff; }
+  iframe { width: 100%; height: 600px; border: 1px solid #ddd; border-radius: 6px; }
+</style>
+
+</head>
+<body>
+
+<h1>🌐 Dual AI Coach — ChatGPT + Hume AI</h1>
+
+<!-- ==================== CHAPTER 1: CHATGPT EMBED ==================== -->
+<div class="section" id="chatgpt-section">
+  <h2>ChatGPT (Embedded Link)</h2>
+  <p>If the iframe doesn’t show, it’s due to OpenAI blocking embedding — scroll down for Hume AI.</p>
+
+  <!-- Replace the "XXXXX" with your ChatGPT Share link -->
+  <iframe
+    src="https://chat.openai.com/share/694f9a48-9f8c-8010-a30e-70e572d71d30"
+    sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+  ></iframe>
+
+  <p>Note: Not all share links allow iframe embedding because OpenAI configures headers to block framing.</p>
+</div>
+
+<!-- ==================== CHAPTER 2: HUME AI WIDGET ==================== -->
+<div class="section" id="hume-section">
+  <h2>Hume AI Coach</h2>
+  <p>This uses the Hume AI embed widget. It must be hosted over HTTPS.</p>
+
+  <div id="hume-widget">Loading Hume AI...</div>
+
+  <!-- Add the Hume Embed SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@humeai/voice-embed@latest/dist/voice-embed.min.js"></script>
+
+  <script>
+    // ⚠ Replace this with your **actual Hume AI API Key**
+    const HUME_API_KEY = "lQLQHBNb75NbBJMmfjNIPFzglJbMkCwrkdYJAyhAUxTJ4D0H";
+
+    // Initialize the Hume AI embed
+    try {
+      const widget = new HumeAI.Embed({
+        container: document.getElementById('hume-widget'),
+        auth: {
+          type: 'apiKey',
+          value: HUME_API_KEY
+        },
+        onReady: () => console.log("Hume AI is ready"),
+        onMessage: (msg) => console.log("Hume AI says:", msg)
+      });
+
+      // Optional: open the widget UI
+      widget.open();
+    } catch (err) {
+      document.getElementById('hume-widget').textContent = "Failed to initialize Hume AI: " + err;
+    }
+  </script>
+
+  <p>If you see errors here, make sure you:</p>
+  <ul>
+    <li>Hosted this HTML on HTTPS (GitHub Pages, Netlify, Vercel)</li>
+    <li>Replaced YOUR_HUME_API_KEY_HERE with a valid key</li>
+    <li>Are using a supported browser (Chrome/Firefox) with JavaScript enabled</li>
+  </ul>
+</div>
+
+</body>
+</html>
