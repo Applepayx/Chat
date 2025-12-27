@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Hume AI Salesforce Coach</title>
+  <script src="https://cdn.jsdelivr.net/npm/@humeai/voice-embed@latest/dist/voice-embed.min.js"></script>
+</head>
+<body>
+  <h1>Hume AI Salesforce Coach</h1>
+  <div id="hume-ai-widget"></div>
+
+  <script>
+    // Initialize Hume AI widget
+    const widget = new HumeAI.Embed({
+      container: document.getElementById('hume-ai-widget'),
+      auth: {
+        type: 'apiKey',
+        value: 'lQLQHBNb75NbBJMmfjNIPFzglJbMkCwrkdYJAyhAUxTJ4D0H' // <-- Insert your API key
+      },
+      onMessage: (msg) => console.log('Message received:', msg)
+    });
+
+    // Optional: open widget automatically
+    widget.open();
+  </script>
+</body>
+</html>
